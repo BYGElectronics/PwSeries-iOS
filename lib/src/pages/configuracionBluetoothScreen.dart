@@ -1,4 +1,6 @@
- import 'package:flutter/material.dart';
+// lib/src/pages/configuracionBluetoothScreen.dart
+
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pw/widgets/header_widget_back.dart';
 
@@ -12,8 +14,8 @@ class ConfiguracionBluetoothScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ConfiguracionBluetoothController>(
-      create: (_) => ConfiguracionBluetoothController(),
-      child: const _ConfiguracionBluetoothView(), // Puedes dejar el const aquí
+      create: (_) => ConfiguracionBluetoothController()..iniciarEscaneo(),
+      child: const _ConfiguracionBluetoothView(),
     );
   }
 }
@@ -23,7 +25,6 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Definimos ancho y alto aquí, dentro del build
     final w = MediaQuery.of(context).size.width;
     final h = MediaQuery.of(context).size.height;
     final theme = Theme.of(context);
@@ -39,8 +40,9 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
             left: 0,
             right: 0,
             child: HeaderWidgetBack(),
-          ), //HEADER
-          // Contenido responsive
+          ),
+
+          // Contenido principal
           Positioned(
             top: h * 0.18,
             left: w * 0.05,
@@ -62,9 +64,10 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
                 ),
                 Divider(thickness: 2, color: theme.dividerColor),
                 SizedBox(height: h * 0.01),
+
+                // Lista o mensaje de búsqueda
                 Expanded(
-                  child:
-                  controller.dispositivosEncontrados.isEmpty
+                  child: controller.dispositivosEncontrados.isEmpty
                       ? Center(
                     child: Text(
                       'Buscando dispositivos...',
@@ -77,70 +80,58 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
                     ),
                   )
                       : ListView(
-                    // Si hay un dispositivo seleccionado, sólo lo mostramos,
-                    // si no, mostramos todo el listado.
-                    children:
-                    controller.dispositivosEncontrados
+                    children: controller.dispositivosEncontrados
                         .where(
                           (d) =>
                       controller.selectedDevice == null ||
-                          controller.selectedDevice!.address ==
-                              d.address,
+                          controller.selectedDevice!.id == d.id,
                     )
                         .map((d) {
                       final showPin =
-                          controller.selectedDevice?.address ==
-                              d.address;
-                      final isConnecting =
-                          controller
-                              .dispositivoConectando
-                              ?.address ==
-                              d.address;
+                          controller.selectedDevice?.id == d.id;
+                      final isConnecting = controller.estadoConectando &&
+                          controller.selectedDevice?.id == d.id;
 
                       return Column(
-                        crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Fila del dispositivo
                           Row(
                             mainAxisAlignment:
                             MainAxisAlignment.spaceBetween,
                             children: [
-                              Column(
-                                crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    d.name,
-                                    style: TextStyle(
-                                      fontFamily:
-                                      'PWSeriesFont',
-                                      fontSize: w * 0.05,
-                                      fontWeight:
-                                      FontWeight.bold,
-                                      color:
-                                      theme
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.color,
+                              Flexible(
+                                child: Column(
+                                  crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      d.name,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontFamily: 'PWSeriesFont',
+                                        fontSize: w * 0.05,
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.textTheme.bodyLarge
+                                            ?.color,
+                                      ),
                                     ),
-                                  ),
-                                  SizedBox(height: h * 0.001),
-                                  Text(
-                                    d.address,
-                                    style: theme
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                      fontSize: w * 0.035,
-                                      color:
-                                      theme.hintColor,
+                                    SizedBox(height: h * 0.001),
+                                    Text(
+                                      d.id, // <-- antes: d.address
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                        fontSize: w * 0.020,
+                                        color: theme.hintColor,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                               GestureDetector(
-                                onTap:
-                                    () => controller
+                                onTap: isConnecting
+                                    ? null
+                                    : () => controller
                                     .togglePinVisibility(d),
                                 child: Image.asset(
                                   isConnecting
@@ -153,16 +144,17 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
                               ),
                             ],
                           ),
-                          if (showPin)
-                            SizedBox(height: h * 0.05),
-                          if (showPin)
+
+                          // Teclado de PIN (solo si se seleccionó este dispositivo)
+                          if (showPin) ...[
+                            SizedBox(height: h * 0.02),
                             Column(
                               crossAxisAlignment:
                               CrossAxisAlignment.center,
                               children: [
+                                // Mostrar PIN ingresado como ••••
                                 Text(
-                                  controller.pinIngresado
-                                      .replaceAll(
+                                  controller.pinIngresado.replaceAll(
                                     RegExp(r'.'),
                                     '•',
                                   ),
@@ -170,32 +162,44 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
                                     fontSize: w * 0.08,
                                     letterSpacing: w * 0.01,
                                     color:
-                                    theme
-                                        .textTheme
-                                        .bodyLarge
-                                        ?.color,
+                                    theme.textTheme.bodyLarge?.color,
                                   ),
                                 ),
-                                SizedBox(height: h * 0.001),
+                                SizedBox(height: h * 0.01),
+
+                                // Teclado numérico
                                 SizedBox(
                                   height: h * 0.70,
                                   child: TecladoPinWidget(
-                                    onPinComplete: (pin) {
-                                      controller.pinIngresado =
-                                          pin;
-                                      controller
-                                          .enviarPinYConectar(
-                                        context,
-                                      );
+                                    onPinComplete: (pin) async {
+                                      // 1) Guardar PIN en el controlador
+                                      controller.pinIngresado = pin;
+
+                                      // 2) Intentar conectar con el PIN (BLE + auth)
+                                      await controller
+                                          .enviarPinYConectar(context);
+
+                                      // 3) Si todo OK, ir al Control
+                                      if (controller
+                                          .ultimoResultadoConexion ==
+                                          true) {
+                                        if (context.mounted) {
+                                          Navigator.of(context)
+                                              .pushReplacementNamed(
+                                            '/control',
+                                          );
+                                        }
+                                      }
                                     },
                                   ),
                                 ),
                               ],
                             ),
+                          ],
+                          SizedBox(height: h * 0.02),
                         ],
                       );
-                    })
-                        .toList(),
+                    }).toList(),
                   ),
                 ),
               ],

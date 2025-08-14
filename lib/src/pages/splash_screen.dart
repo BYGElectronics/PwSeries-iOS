@@ -3,19 +3,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
-
-// Bluetooth Classic
-import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart'
-as btClassic
-    show BluetoothConnection;
-
-// Bluetooth LE
-import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
-
-import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
-import 'package:pw/src/Controller/control_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -24,156 +12,48 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
+/// Clave única para saber si el PIN ya se estableció correctamente.
+/// En tu flujo de configuración, cuando el PIN quede OK:
+///   final prefs = await SharedPreferences.getInstance();
+///   await prefs.setBool(kIsPinConfiguredKey, true);
+const String kIsPinConfiguredKey = 'is_pin_configured_ok';
+
 class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _iniciarAplicacion();
+    // Si por alguna razón se ejecuta en otra plataforma, simplemente continúa (no hace conexiones).
+    unawaited(_boot());
   }
 
-  Future<void> _iniciarAplicacion() async {
-    // 1️⃣ Permisos de Bluetooth y ubicación
-    await _solicitarPermisos();
-
-    // 2️⃣ Asegurar Bluetooth Classic ON (Android)
-    if (Platform.isAndroid) {
-      final state = await FlutterBluetoothSerial.instance.state;
-      if (state != BluetoothState.STATE_ON) {
-        await FlutterBluetoothSerial.instance.requestEnable();
-      }
-    }
-
-    // 3️⃣ Asegurar Bluetooth LE ON
-    if (!await ble.FlutterBluePlus.isOn) {
-      await ble.FlutterBluePlus.turnOn();
-    }
-
-    // 4️⃣ Mostrar splash 2 segundos
-    await Future.delayed(const Duration(seconds: 2));
+  Future<void> _boot() async {
+    // 1) Pequeño delay para mostrar el splash (opcional)
+    await Future.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
 
-    // 5️⃣ Buscar dispositivo emparejado “BTPW”
-    BluetoothDevice? paired;
-    if (Platform.isAndroid) {
-      final bonded = await FlutterBluetoothSerial.instance.getBondedDevices();
-      for (var d in bonded) {
-        if ((d.name ?? '').toLowerCase().contains('btpw')) {
-          paired = d;
-          break;
-        }
-      }
-    }
+    // 2) Leer bandera de PIN desde preferencias
+    final prefs = await SharedPreferences.getInstance();
+    final bool isPinConfigured = prefs.getBool(kIsPinConfiguredKey) ?? false;
 
-    if (paired == null) {
-      // ❌ No hay dispositivo BTPW → a /home
-      Navigator.pushReplacementNamed(context, '/home');
-      return;
-    }
-                        
-
-
-
-    // 6️⃣ Intentar con
-    //ectar por Classic con retries
-    await FlutterBluetoothSerial.instance.cancelDiscovery();
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    btClassic.BluetoothConnection? classicConn;
-    for (int intento = 1; intento <= 0; intento++) {
-      try {
-        classicConn = await btClassic.BluetoothConnection.toAddress(
-          paired.address,
-        ).timeout(const Duration(seconds: 10));
-        debugPrint('✅ Classic conectado (intento $intento)');
-        break;
-      } catch (e) {
-        debugPrint('⚠️ Falló conexión Classic (intento $intento): $e');
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-    }
-
-    if (classicConn != null) {
-      // 7️⃣ Guardar la conexión en el controlador
-      final ctrl = Provider.of<ControlController>(context, listen: false);
-      ctrl.classicConnection = classicConn;
-      ctrl.connectedClassicDevice = paired;
+    // 3) Decidir navegación SIN iniciar ninguna conexión
+    if (!mounted) return;
+    if (isPinConfigured) {
+      // PIN OK → ir a control
+      _goTo('/control');
     } else {
-      debugPrint('❌ No se pudo conectar Classic tras 3 intentos');
+      // PIN NO configurado → ir a configuración inicial
+      _goTo('/home');
     }
-
-    // 8️⃣ Seguir con BLE
-    await _conectarAutomaticamenteBLE(paired.address);
   }
 
-  Future<void> _solicitarPermisos() async {
-    await [
-      Permission.bluetooth,
-      Permission.bluetoothConnect,
-      Permission.bluetoothScan,
-      Permission.location,
-    ].request();
-  }
-
-  Future<void> _conectarAutomaticamenteBLE(String macAddress) async {
-    ble.BluetoothDevice? bleDevice;
-    final completer = Completer<ble.BluetoothDevice>();
-    final sub = ble.FlutterBluePlus.scanResults.listen((results) {
-      for (var r in results) {
-        if (r.device.remoteId.str.toLowerCase() == macAddress.toLowerCase()) {
-          completer.complete(r.device);
-          break;
-        }
-      }
-    });
-
-    try {
-      await ble.FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
-      bleDevice = await completer.future.timeout(const Duration(seconds: 5));
-    } catch (_) {
-      bleDevice = null;
-    } finally {
-      await ble.FlutterBluePlus.stopScan();
-      await sub.cancel();
-    }
-
-    if (bleDevice != null) {
-      try {
-        await bleDevice.connect(timeout: const Duration(seconds: 5));
-        await bleDevice.discoverServices();
-
-        ble.BluetoothCharacteristic? writeChar;
-        for (var svc in bleDevice.servicesList) {
-          for (var ch in svc.characteristics) {
-            if (ch.uuid.toString().toLowerCase().contains('ff01')) {
-              writeChar = ch;
-              break;
-            }
-          }
-          if (writeChar != null) break;
-        }
-
-        if (writeChar != null) {
-          final ctrl = Provider.of<ControlController>(context, listen: false);
-          ctrl.setDevice(bleDevice);
-          ctrl.setWriteCharacteristic(writeChar);
-          ctrl.startBatteryStatusMonitoring();
-          ctrl.requestSystemStatus();
-        }
-      } catch (e) {
-        debugPrint("⚠️ Error en BLE automática: $e");
-      }
-    }
-
-    // 9️⃣ Ir a pantalla de control (con o sin BLE)
-    Navigator.pushReplacementNamed(
-      context,
-      '/control',
-      arguments: {'device': bleDevice},
-    );
+  void _goTo(String routeName) {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed(routeName);
   }
 
   @override
   Widget build(BuildContext context) {
+    // UI de splash full-screen
     return Scaffold(
       body: Center(
         child: Image.asset(
@@ -181,10 +61,9 @@ class _SplashScreenState extends State<SplashScreen> {
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          errorBuilder:
-              (ctx, error, stack) => Container(
+          errorBuilder: (ctx, error, stack) => Container(
             color: Colors.black,
-            child: const Icon(Icons.error, color: Colors.red, size: 50),
+            child: const Icon(Icons.error, color: Colors.red, size: 48),
           ),
         ),
       ),

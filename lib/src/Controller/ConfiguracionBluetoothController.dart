@@ -1,99 +1,68 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
-
-import 'control_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DeviceData {
-  final String name;
-  final String address;
-  final bool isBLE;
-  int missedScans;
-
-  DeviceData({
+  final String name; // nombre visible
+  final String id; // remoteId.str
+  final ble.BluetoothDevice device; // instancia BLE
+  const DeviceData({
     required this.name,
-    required this.address,
-    required this.isBLE,
-    this.missedScans = 0,
+    required this.id,
+    required this.device,
   });
 }
 
 class ConfiguracionBluetoothController extends ChangeNotifier {
-  List<DeviceData> dispositivosEncontrados = [];
-  StreamSubscription<List<ble.ScanResult>>? _scanSubscription;
-  Timer? _scanTimer;
+  // ===== Config =====
+  static const String setupPin = '9459'; // PIN fijo
+  static const List<String> authCharCandidates = [
+    'ff01',
+    'fff1',
+    'ffe1',
+    'ffd1',
+  ];
 
-  final String pinMask = "9459";
-  final String pinReal = "1865";
+  // Tiempos de escaneo cíclico
+  static const Duration _scanOn = Duration(seconds: 5); // tiempo escaneando
+  static const Duration _scanOff = Duration(seconds: 2); // pausa entre ciclos
+  static const int _maxMissedCycles = 2; // ciclos sin ver -> remover
 
-  String pinIngresado = "";
+  // Estado
+  final List<DeviceData> dispositivosEncontrados = [];
+  final Map<String, int> _missedById = {}; // id -> ciclos perdidos
   DeviceData? selectedDevice;
-  DeviceData? dispositivoConectando;
+  DeviceData? connectedDeviceData;
 
-  ConfiguracionBluetoothController() {
-    _inicializarBluetooth();
-  }
+  bool showPin = false;
+  bool estadoConectando = false;
+  bool? ultimoResultadoConexion;
+  String pinIngresado = '';
 
-  Future<void> _inicializarBluetooth() async {
-    if (!Platform.isAndroid) return;
+  // Escaneo
+  StreamSubscription<List<ble.ScanResult>>? _scanSub;
+  Timer? _cycleTimer;
+  bool _isCycling = false;
+  bool _disposed = false;
 
-    final estado = await FlutterBluetoothSerial.instance.state;
-    if (estado != BluetoothState.STATE_ON) {
-      await FlutterBluetoothSerial.instance.requestEnable();
-    }
-
-    if (await Permission.bluetoothConnect.isDenied) {
-      await Permission.bluetoothConnect.request();
-      if (await Permission.bluetoothConnect.isDenied) return;
-    }
-
-    // ✅ Solicita permiso de ubicación en Android 12 o inferior
-    if (Platform.isAndroid && int.tryParse(Platform.version.split('.').first) != null) {
-      final version = int.parse(Platform.version.split('.').first);
-      if (version <= 12) {
-        await Permission.locationWhenInUse.request();
-      }
-    }
-
-    final bonded = await FlutterBluetoothSerial.instance.getBondedDevices();
-    for (var d in bonded) {
-      if ((d.name ?? '').toLowerCase().contains("btpw")) {
-        final auto = DeviceData(
-          name: d.name!,
-          address: d.address,
-          isBLE: false,
-        );
-        dispositivosEncontrados.add(auto);
-        if (dispositivosEncontrados.length == 1) {
-          selectedDevice = auto;
-        }
-        break;
-      }
-    }
-
-    notifyListeners();
-    _iniciarEscaneoPeriodico();
-  }
-
-  void togglePinVisibility(DeviceData device) {
-    if (selectedDevice?.address == device.address) {
-      selectedDevice = null;
-      pinIngresado = "";
-    } else {
-      selectedDevice = device;
-      pinIngresado = "";
-    }
+  // ─────────── UI
+  void seleccionar(DeviceData d) {
+    selectedDevice = d;
     notifyListeners();
   }
 
-  void agregarDigito(String d) {
-    if (pinIngresado.length < 6) {
-      pinIngresado += d;
+  void togglePinVisibility(DeviceData d) {
+    if (selectedDevice?.id != d.id) selectedDevice = d;
+    showPin = !showPin;
+    notifyListeners();
+  }
+
+  void ingresarNumero(String n) {
+    if (pinIngresado.length < setupPin.length) {
+      pinIngresado += n;
       notifyListeners();
     }
   }
@@ -105,167 +74,225 @@ class ConfiguracionBluetoothController extends ChangeNotifier {
     }
   }
 
-  Future<void> enviarPinYConectar(BuildContext context) async {
-    if (selectedDevice == null) return;
-
-    if (pinIngresado != pinMask) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("PIN incorrecto")),
-      );
-      _reiniciarEmparejamiento();
-      return;
-    }
-
-    final mac = selectedDevice!.address;
-    dispositivoConectando = selectedDevice;
-    notifyListeners();
-
-    final okBond = await _pairClassic(mac);
-    if (!okBond) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error emparejando Classic")),
-      );
-      _reiniciarEmparejamiento();
-      return;
-    }
-
-    final conectado = await estaConectado(mac);
-    if (!conectado) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No se logró conectar al dispositivo")),
-      );
-      _reiniciarEmparejamiento();
-      return;
-    }
-
-    if (context.mounted) {
-      Navigator.pushReplacementNamed(
-        context,
-        '/control',
-        arguments: {
-          'device': selectedDevice,
-          'controller': ControlController(),
-        },
-      );
-    }
-  }
-
-  Future<bool> estaConectado(String mac) async {
-    try {
-      final devices = await FlutterBluetoothSerial.instance.getBondedDevices();
-      return devices.any((d) => d.address == mac);
-    } catch (e) {
-      debugPrint("Error verificando conexión: $e");
-      return false;
-    }
-  }
-
-  Future<bool> _pairClassic(String mac) async {
-    try {
-      final bondedDevices = await FlutterBluetoothSerial.instance.getBondedDevices();
-      final yaEmparejado = bondedDevices.any((d) => d.address == mac);
-
-      if (yaEmparejado) {
-        debugPrint("ℹ️ Dispositivo $mac ya estaba emparejado.");
-        return true;
-      }
-
-      final success = await FlutterBluetoothSerial.instance.bondDeviceAtAddress(
-        mac,
-        pin: pinReal,
-      );
-
-      debugPrint(success == true
-          ? "✅ Emparejamiento exitoso con $mac"
-          : "⚠️ No se pudo emparejar con $mac");
-
-      return success == true;
-    } catch (e) {
-      if (e.toString().contains("pairing request handler already registered")) {
-        debugPrint("ℹ️ Dispositivo $mac ya emparejado (detected by exception).");
-        return true;
-      }
-
-      debugPrint("❌ Error bond Classic: $e");
-      return false;
-    }
-  }
-
-  void _reiniciarEmparejamiento() {
-    pinIngresado = "";
+  // ─────────── Escaneo BLE (cíclico)
+  Future<void> iniciarEscaneo() async {
+    ultimoResultadoConexion = null;
+    showPin = false;
     selectedDevice = null;
-    dispositivoConectando = null;
+    pinIngresado = '';
+    dispositivosEncontrados.clear();
+    _missedById.clear();
     notifyListeners();
-    _iniciarEscaneoPeriodico();
-  }
 
-  void _iniciarEscaneoPeriodico() {
-    _scanTimer?.cancel();
-    _scanTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      _escanearYActualizarDispositivos();
-    });
-    _escanearYActualizarDispositivos();
-  }
-
-  Future<void> _escanearYActualizarDispositivos() async {
-    if (!await Permission.bluetoothScan.isGranted) return;
-
-    final nuevos = <DeviceData>[];
-
+    await Permission.bluetoothScan.request();
+    await Permission.bluetoothConnect.request();
     if (Platform.isAndroid) {
-      final bonded = await FlutterBluetoothSerial.instance.getBondedDevices();
-      nuevos.addAll(
-        bonded
-            .where((d) => (d.name ?? "").toLowerCase().contains("btpw"))
-            .map((d) => DeviceData(name: d.name!, address: d.address, isBLE: false)),
-      );
+      await Permission.location.request();
     }
 
-    await ble.FlutterBluePlus.stopScan();
-    _scanSubscription?.cancel();
-    final encontradosBLE = <DeviceData>[];
+    await _detenerEscaneoInterno();
+    _isCycling = true;
+    _cicloEscaneo(); // inicia el bucle
+  }
 
-    _scanSubscription = ble.FlutterBluePlus.scanResults.listen((results) {
-      for (var r in results) {
-        final name = r.device.name;
-        final id = r.device.remoteId.id;
-        if (name.toLowerCase().contains("btpw") &&
-            !encontradosBLE.any((e) => e.address == id)) {
-          encontradosBLE.add(DeviceData(name: name, address: id, isBLE: true));
+  /// Fuerza un ciclo inmediato (útil para pull-to-refresh)
+  Future<void> refrescarAhora() async {
+    if (!_isCycling) {
+      _isCycling = true;
+      await _cicloEscaneo();
+    }
+  }
+
+  Future<void> _cicloEscaneo() async {
+    if (_disposed || !_isCycling) return;
+
+    // 1) Preparar listener de resultados
+    final vistosEnEsteCiclo = <String>{};
+    await _detenerEscaneoInterno(); // por si había algo viejo
+
+    _scanSub = ble.FlutterBluePlus.scanResults.listen((results) {
+      for (final r in results) {
+        final visibleName =
+            r.device.platformName.isNotEmpty
+                ? r.device.platformName
+                : r.advertisementData.advName;
+        final lower = visibleName.toLowerCase();
+
+        if (lower.contains('btpw')) {
+          final id = r.device.remoteId.str;
+          vistosEnEsteCiclo.add(id);
+
+          // si es nuevo, lo agregamos
+          final exists = dispositivosEncontrados.any((e) => e.id == id);
+          if (!exists) {
+            final pretty = visibleName.isNotEmpty ? visibleName : 'btpw';
+            dispositivosEncontrados.add(
+              DeviceData(name: pretty, id: id, device: r.device),
+            );
+            _missedById[id] = 0;
+            notifyListeners();
+          } else {
+            // si ya estaba, reseteamos su contador de "no visto"
+            _missedById[id] = 0;
+          }
         }
       }
     });
 
-    await ble.FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
-    await Future.delayed(const Duration(seconds: 5));
-    await ble.FlutterBluePlus.stopScan();
-    await _scanSubscription?.cancel();
+    // 2) Empezar a escanear por _scanOn
+    await ble.FlutterBluePlus.startScan(timeout: _scanOn);
+    // Nota: el timeout de startScan ya parará el escaneo al cumplirse _scanOn
 
-    nuevos.addAll(encontradosBLE);
+    // 3) Cerrar listener de este ciclo
+    await _scanSub?.cancel();
+    _scanSub = null;
 
-    final direcciones = nuevos.map((d) => d.address).toSet();
-    for (var old in dispositivosEncontrados) {
-      old.missedScans += direcciones.contains(old.address) ? 0 : 1;
-    }
-    for (var n in nuevos) {
-      if (!dispositivosEncontrados.any((d) => d.address == n.address)) {
-        dispositivosEncontrados.add(n);
+    // 4) Incrementar "missed" de los que no vimos y eliminar los que excedan
+    for (final dev in List<DeviceData>.from(dispositivosEncontrados)) {
+      if (!vistosEnEsteCiclo.contains(dev.id)) {
+        final missed = (_missedById[dev.id] ?? 0) + 1;
+        _missedById[dev.id] = missed;
+        if (missed >= _maxMissedCycles) {
+          dispositivosEncontrados.removeWhere((d) => d.id == dev.id);
+        }
       }
     }
-    dispositivosEncontrados.removeWhere((d) => d.missedScans >= 3);
+    if (!_disposed) notifyListeners();
 
-    notifyListeners();
+    // 5) Pausa entre ciclos y repetir
+    if (_isCycling && !_disposed) {
+      _cycleTimer?.cancel();
+      _cycleTimer = Timer(_scanOff, _cicloEscaneo);
+    }
   }
 
-  void _cancelarEscaneo() {
-    _scanSubscription?.cancel();
-    ble.FlutterBluePlus.stopScan();
-    _scanTimer?.cancel();
+  Future<void> _detenerEscaneoInterno() async {
+    _cycleTimer?.cancel();
+    _cycleTimer = null;
+    try {
+      await ble.FlutterBluePlus.stopScan();
+    } catch (_) {}
+    await _scanSub?.cancel();
+    _scanSub = null;
+  }
+
+  Future<void> detenerEscaneo() async {
+    _isCycling = false;
+    await _detenerEscaneoInterno();
+  }
+
+  // ─────────── Conexión + Autenticación (PIN)
+  Future<void> enviarPinYConectar(BuildContext context) async {
+    if (selectedDevice == null) return;
+
+    if (pinIngresado != setupPin) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("PIN incorrecto")));
+      return;
+    }
+
+    estadoConectando = true;
+    ultimoResultadoConexion = null;
+    notifyListeners();
+
+    try {
+      await detenerEscaneo();
+
+      final device = selectedDevice!.device;
+
+      if (device.connectionState != ble.BluetoothConnectionState.connected) {
+        await device.connect(timeout: const Duration(seconds: 10));
+      }
+
+      final services = await device.discoverServices();
+
+      ble.BluetoothCharacteristic? authChar;
+      for (final s in services) {
+        for (final c in s.characteristics) {
+          final cu = c.uuid.toString().toLowerCase();
+          final matchesCandidate = authCharCandidates.any(
+            (frag) => cu.contains(frag),
+          );
+          final canWrite =
+              c.properties.write || c.properties.writeWithoutResponse;
+          if (matchesCandidate && canWrite) {
+            authChar = c;
+            break;
+          }
+        }
+        if (authChar != null) break;
+      }
+
+      if (authChar == null) {
+        debugPrint(
+          '⚠️ No se encontró característica de autenticación. Servicios detectados:',
+        );
+        for (final s in services) {
+          debugPrint('  • Service: ${s.uuid}');
+          for (final c in s.characteristics) {
+            debugPrint(
+              '    ↳ Char: ${c.uuid} '
+              '(write=${c.properties.write}, '
+              'writeNR=${c.properties.writeWithoutResponse}, '
+              'notify=${c.properties.notify})',
+            );
+          }
+        }
+        await device.disconnect();
+        estadoConectando = false;
+        ultimoResultadoConexion = false;
+        notifyListeners();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("No se encontró característica de autenticación."),
+          ),
+        );
+        return;
+      }
+
+      await authChar.write(
+        pinIngresado.codeUnits,
+        withoutResponse: !authChar.properties.write,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasCompletedInitialConfig', true);
+
+      connectedDeviceData = DeviceData(
+        name: selectedDevice!.name,
+        id: selectedDevice!.id,
+        device: device,
+      );
+
+      estadoConectando = false;
+      ultimoResultadoConexion = true;
+      notifyListeners();
+    } catch (e) {
+      estadoConectando = false;
+      ultimoResultadoConexion = false;
+      notifyListeners();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error de conexión BLE: $e")));
+    } finally {
+      // Si quieres reanudar el escaneo de fondo (para detectar otros BTPW)
+      if (!_disposed) {
+        _isCycling = true;
+        _cicloEscaneo();
+      }
+    }
+  }
+
+  // ─────────── Ciclo de vida
+  Future<void> cancelarTodo() async {
+    await detenerEscaneo();
   }
 
   @override
   void dispose() {
-    _cancelarEscaneo();
+    _disposed = true;
+    cancelarTodo();
     super.dispose();
   }
 }

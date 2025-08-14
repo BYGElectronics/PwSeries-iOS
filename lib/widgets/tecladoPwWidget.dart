@@ -49,8 +49,8 @@ class TecladoPW extends StatelessWidget {
                 _buildSimpleButton(
                   asset: "assets/images/tecladoPw/botones/Off/interOff.png",
                   onTap: conectado
-                      ? controller.activateInter
-                      : () => _showNoConnectionAlert(context),
+                      ? () => _showPttUnavailableinter(context)
+                      : () => _showPttUnavailableinter(context),
                   width: fondoWidth * 0.25,
                   height: fondoHeight * 0.35,
                 ),
@@ -79,12 +79,14 @@ class TecladoPW extends StatelessWidget {
                   width: fondoWidth * 0.35,
                   height: fondoHeight * 0.30,
                 ),
+
+                // PTT: siempre muestra mensaje de no disponible en iOS
                 _buildPressHoldButton(
-                  assetOn: "assets/images/tecladoPw/botones/On/pttOn.png",
+                  assetOn: "assets/images/tecladoPw/botones/Off/pttOff.png",
                   assetOff: "assets/images/tecladoPw/botones/Off/pttOff.png",
-                  onPress: () => controller.togglePTT(forceOn: true),
-                  onRelease: () => controller.togglePTT(forceOn: false),
-                  enabled: conectado,
+                  onPress: () => _showPttUnavailable(context),
+                  onRelease: () {}, // no hace falta nada al soltar
+                  enabled: true,    // habilitado para que capture el toque y muestre el mensaje
                   width: fondoWidth * 0.25,
                   height: fondoHeight * 0.35,
                 ),
@@ -101,15 +103,16 @@ class TecladoPW extends StatelessWidget {
     required VoidCallback onTap,
     double width = 100,
     double height = 70,
-  }) => GestureDetector(
-    onTap: onTap,
-    child: Image.asset(
-      asset,
-      width: width,
-      height: height,
-      fit: BoxFit.contain,
-    ),
-  );
+  }) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Image.asset(
+          asset,
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+        ),
+      );
 
   Widget _buildPressHoldButton({
     required String assetOn,
@@ -143,6 +146,25 @@ class TecladoPW extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('❗ Debes conectar al dispositivo PW primero'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showPttUnavailable(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('En iOS no es posible utilizar la función PTT por el momento.'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showPttUnavailableinter(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('En iOS no es posible utilizar la función Intercomunicador por el momento.'),
+        duration: Duration(seconds: 3),
       ),
     );
   }

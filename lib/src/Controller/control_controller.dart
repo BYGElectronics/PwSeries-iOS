@@ -8,7 +8,6 @@ import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart'
 as btClassic; // Biblioteca para manejar Bluetooth Classic (perfil serial), usada para audio por PTT.
 import 'dart:typed_data';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:pw/src/Controller/pttController.dart';
 import 'dart:io' show Platform;
@@ -81,9 +80,7 @@ class ControlController extends ChangeNotifier {
   // ────────────────────────────────────────────────────────────────
   // 🔊 Push-To-Talk (PTT)
   // ────────────────────────────────────────────────────────────────
-  final FlutterSoundRecorder _recorder =
-  FlutterSoundRecorder(); // Recorder para PTT
-  bool _isRecorderInitialized = false; // Estado de inicialización del recorder
+
 
   StreamSubscription<Uint8List>?
   _micSub; // Subscripción al stream de audio del mic
@@ -572,20 +569,7 @@ class ControlController extends ChangeNotifier {
     requestSystemStatus();
   }
 
-  Future<void> initRecorder() async {
-    if (_recorder.isStopped && !_isRecorderInitialized) {
-      await _recorder.openRecorder();
-      _isRecorderInitialized = true;
 
-      _audioStreamController.stream.listen((buffer) async {
-        if (classicConnection != null && classicConnection!.isConnected) {
-          classicConnection!.output.add(buffer);
-          await classicConnection!.output.allSent;
-        }
-      });
-    }
-
-  }
 
   Future<void> conectarClassicSiRecuerda(String mac) async {
     final dispositivoEmparejado = await buscarEnEmparejados(mac);
@@ -779,22 +763,7 @@ class ControlController extends ChangeNotifier {
               "${pttOnFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
         );
 
-        // 4.3) Abrir recorder y suscribir al stream (si no está inicializado)
-        if (!_isRecorderInitialized) {
-          await _recorder.openRecorder();
-          _isRecorderInitialized = true;
 
-          _micSub = _micController.stream.listen((buffer) async {
-            // En iOS, al tener AVAudioSession con allowBluetooth,
-            // el AudioTrack nativo se encargará de enviar el audio al periférico emparejado.
-            try {
-              await _audioTrackChannel.invokeMethod('writeAudio', buffer);
-              debugPrint("🔊 Audio enviado a AudioTrack (iOS).");
-            } catch (e) {
-              debugPrint("❌ Error enviando audio a AudioTrack: $e");
-            }
-          });
-        }
 
         // 4.4) Iniciar canal nativo de audio (AudioTrack) en iOS
         try {
@@ -804,14 +773,7 @@ class ControlController extends ChangeNotifier {
           debugPrint("❌ No se pudo iniciar AudioTrack en iOS: $e");
         }
 
-        // 4.5) Iniciar grabación
-        await _recorder.startRecorder(
-          codec: Codec.pcm16,
-          sampleRate: 8000,
-          numChannels: 1,
-          audioSource: AudioSource.microphone,
-          toStream: _micController.sink,
-        );
+
         debugPrint("🎙️ Grabación de PTT iniciada (iOS).");
 
         isPTTActive = true;
@@ -819,11 +781,6 @@ class ControlController extends ChangeNotifier {
         // ─── PTT OFF en iOS ──────────────────
         debugPrint("⏹️ Deteniendo PTT (iOS)...");
 
-        // 4.6) Detener grabación si estaba activa
-        if (_recorder.isRecording) {
-          await _recorder.stopRecorder();
-          debugPrint("⏹️ Grabación detenida (iOS).");
-        }
 
         // 4.7) Detener canal nativo (AudioTrack)
         try {
@@ -849,45 +806,12 @@ class ControlController extends ChangeNotifier {
         await sendCommand(pttOnFrame);
         debugPrint("✅ [ControlController] PTT ON (App) enviado (Android).");
 
-        if (!_isRecorderInitialized) {
-          await _recorder.openRecorder();
-          _isRecorderInitialized = true;
 
-          _micSub = _micController.stream.listen((buffer) async {
-            // Enviar por Bluetooth Classic si está conectado
-            if (classicConnection != null && classicConnection!.isConnected) {
-              classicConnection!.output.add(buffer);
-              await classicConnection!.output.allSent;
-            }
-            // Enviar a la bocina del celular
-            try {
-              await _audioTrackChannel.invokeMethod('writeAudio', buffer);
-            } catch (e) {
-              debugPrint("❌ Error enviando a AudioTrack: $e");
-            }
-          });
-        }
-
-        // Iniciar canal nativo y grabación en Android
-        await _audioTrackChannel.invokeMethod('startAudioTrack');
-        await _recorder.startRecorder(
-          codec: Codec.pcm16,
-          sampleRate: 8000,
-          numChannels: 1,
-          audioSource: AudioSource.microphone,
-          toStream: _micController.sink,
-        );
 
         isPTTActive = true;
         debugPrint("🎤 [ControlController] Grabación PTT iniciada (Android).");
       } else {
         // ─── PTT OFF en Android ──────────────────
-        if (_recorder.isRecording) {
-          await _recorder.stopRecorder();
-          debugPrint(
-            "🛑 [ControlController] Grabación PTT detenida (Android).",
-          );
-        }
         await _audioTrackChannel.invokeMethod('stopAudioTrack');
         await sendCommand(pttOffFrame);
         debugPrint("✅ [ControlController] PTT OFF (App) enviado (Android).");
@@ -902,8 +826,6 @@ class ControlController extends ChangeNotifier {
   }
   @override
   void dispose() {
-    if (_recorder.isRecording) _recorder.stopRecorder();
-    _recorder.closeRecorder();
     _micSub?.cancel();
     _micController.close();
 

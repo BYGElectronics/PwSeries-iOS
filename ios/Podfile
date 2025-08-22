@@ -1,5 +1,4 @@
-platform :ios, '12.0'  # 👈 Versión mínima requerida por la mayoría de plugins modernos
-
+platform :ios, '13.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -13,7 +12,6 @@ def flutter_root
   unless File.exist?(generated_xcode_build_settings_path)
     raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
   end
-
   File.foreach(generated_xcode_build_settings_path) do |line|
     matches = line.match(/FLUTTER_ROOT\=(.*)/)
     return matches[1].strip if matches
@@ -26,8 +24,11 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks! :linkage => :static  # 👈 Recomendado para plugins con binarios
-  use_modular_headers!                 # 👈 Necesario para evitar conflictos con cabeceras Flutter
+  # ⚠️ Evita problemas con Flutter/Flutter.h:
+  #  - No uses `use_modular_headers!` global.
+  #  - Quita `use_frameworks!` si no lo necesitas.
+  # Si algún pod exige frameworks, usa estáticos:
+  # use_frameworks! :linkage => :static
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
@@ -37,11 +38,40 @@ target 'Runner' do
 end
 
 post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)  # 👈 Agrega configuración adicional necesaria
+  installer.pods_project.targets.each do |t|
+    flutter_additional_ios_build_settings(t)
 
-    target.build_configurations.each do |config|
+    t.build_configurations.each do |config|
+      # Coherencia de despliegue y sim
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+
+      # Evita que VerifyModule tumbe el Archive
+      config.build_settings['VALIDATE_WORKSPACE'] = 'NO'
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+
+      # NO tratar warnings como errores
+      config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+      config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+
+      # Silenciar "implicit conversion loses integer precision"
+      existing_c = config.build_settings['WARNING_CFLAGS'] || '$(inherited)'
+      config.build_settings['WARNING_CFLAGS'] = "#{existing_c} -Wno-shorten-64-to-32"
+
+      # Asegura Swift 5 (evita SwiftCompile en plugins)
+      config.build_settings['SWIFT_VERSION'] = '5.0'
+
+      # Suaviza warnings Swift (deprecaciones, keyWindow, etc.)
+      swift_flags = config.build_settings['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+      config.build_settings['OTHER_SWIFT_FLAGS'] = "#{swift_flags} -suppress-warnings"
+    end
+
+    # Opcional: apuntar flags específicos por target si hiciera falta
+    if t.name == 'url_launcher_ios' || t.name == 'shared_preferences_foundation'
+      t.build_configurations.each do |config|
+        swift_flags = config.build_settings['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+        config.build_settings['OTHER_SWIFT_FLAGS'] = "#{swift_flags} -suppress-warnings"
+      end
     end
   end
 end

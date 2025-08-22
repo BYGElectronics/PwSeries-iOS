@@ -14,7 +14,7 @@ class ConexionpwScreen extends StatelessWidget {
     // 1) Desconectar BLE (cualquier dispositivo conectado)
     try {
       final List<ble.BluetoothDevice> devices =
-          await ble.FlutterBluePlus.connectedDevices;
+      await ble.FlutterBluePlus.connectedDevices;
       for (final d in devices) {
         try {
           await d.disconnect();
@@ -33,7 +33,7 @@ class ConexionpwScreen extends StatelessWidget {
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/configuracionBluetooth', // <- volver al flujo de PIN/config
-        (route) => false,
+            (route) => false,
       );
     }
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // CONTROLADORES
 import 'package:pw/src/Controller/control_controller.dart';
@@ -35,11 +36,23 @@ import 'package:pw/src/pages/text_size_screen.dart';
 /// Instancia única de ControlController que se compartirá globalmente
 final ControlController _controlController = ControlController();
 
-void main() async {
+/// Key del flag de onboarding/config inicial
+const String kSetupFlagKey = 'setupInicialCompletado';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Pedimos permiso de micrófono desde el inicio
+  // 1) Pide permiso de micrófono (si aplica a tu flujo)
   await Permission.microphone.request();
+
+  // 2) Lee la bandera ANTES de runApp
+  final prefs = await SharedPreferences.getInstance();
+  final bool yaConfiguroPin = prefs.getBool(kSetupFlagKey) ?? false;
+
+  // 3) Decide la ruta inicial: /control si ya configuró; /home si no
+  //    (Si quieres mantener un splash, puedes mandar a "/" y que sea
+  //     el Splash quien redirija, pero aquí vamos directo y consistente.)
+  final String startRoute = yaConfiguroPin ? "/control" : "/home";
 
   runApp(
     MultiProvider(
@@ -48,7 +61,6 @@ void main() async {
         ChangeNotifierProvider(create: (_) => TextSizeController()),
         ChangeNotifierProvider(create: (_) => ConfigController()),
         ChangeNotifierProvider(create: (_) => ThemeController()),
-
         ChangeNotifierProvider<EstadoSistemaController>(
           lazy: false,
           create: (_) {
@@ -57,28 +69,31 @@ void main() async {
             return estadoCtrl;
           },
         ),
-
         ChangeNotifierProvider<ControlController>.value(
           value: _controlController,
         ),
       ],
-      child: const MyAppWrapper(),
+      child: MyAppWrapper(startRoute: startRoute),
     ),
   );
 }
 
 /// Un wrapper intermedio para separar MultiProvider de MyApp
 class MyAppWrapper extends StatelessWidget {
-  const MyAppWrapper({super.key});
+  final String startRoute;
+  const MyAppWrapper({super.key, required this.startRoute});
+
   @override
   Widget build(BuildContext context) {
-    return const MyApp();
+    return MyApp(startRoute: startRoute);
   }
 }
 
 /// La aplicación principal
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final String startRoute;
+  const MyApp({super.key, required this.startRoute});
+
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -138,7 +153,8 @@ class _MyAppState extends State<MyApp> {
       // =============================
       //        RUTAS / ROUTES
       // =============================
-      initialRoute: "/",
+      // Usamos la ruta calculada en main()
+      initialRoute: widget.startRoute,
       routes: {
         "/": (context) => const SplashScreen(),
         "/home": (context) => HomeScreen(
@@ -146,22 +162,18 @@ class _MyAppState extends State<MyApp> {
           themeMode: themeController.themeMode,
         ),
         "/idioma": (context) => const IdiomaScreen(),
-        "/configuracionBluetooth": (context) =>
-            ConfiguracionBluetoothScreen(),
+        "/configuracionBluetooth": (context) => ConfiguracionBluetoothScreen(),
         "/configAvanzada": (context) => const ConfigAvanzadaScreen(),
-        "/configTeclado": (context) =>
-            ConfigTecladoScreen(controller: _controlController),
+        "/configTeclado": (context) => ConfigTecladoScreen(controller: _controlController),
         "/themeConfig": (context) => const ThemeScreen(),
-        "/splash_denegate": (context) =>
-        const SplashConexionDenegateScreen(),
+        "/splash_denegate": (context) => const SplashConexionDenegateScreen(),
         "/textSize": (context) => const TextSizeScreen(),
         "/acercaDe": (context) => const AcercadeScreen(),
         "/conexionPw": (context) => const ConexionpwScreen(),
         "/demo": (context) => DemoScreen(),
         "/demoConfig": (context) => DemoScreenConfigInicial(),
         "/splash_confirmacion": (context) {
-          final args =
-          ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
           return SplashConexionScreen(
             device: args['device'] as BluetoothDevice,
             controller: args['controller'] as ControlController,
@@ -171,8 +183,7 @@ class _MyAppState extends State<MyApp> {
           final settings = ModalRoute.of(context)!.settings;
           final args = settings.arguments;
           BluetoothDevice? device;
-          if (args is Map<String, dynamic> &&
-              args['device'] is BluetoothDevice) {
+          if (args is Map<String, dynamic> && args['device'] is BluetoothDevice) {
             device = args['device'] as BluetoothDevice;
           } else {
             device = _controlController.connectedDevice;
@@ -183,8 +194,7 @@ class _MyAppState extends State<MyApp> {
           );
         },
         "/controlConfig": (context) {
-          final args =
-          ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
           return ControlConfigScreen(
             connectedDevice: args['device'] as BluetoothDevice,
             controller: _controlController,

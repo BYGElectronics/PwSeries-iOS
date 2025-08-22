@@ -5,7 +5,7 @@ import 'package:flutter/material.dart'; // Importa el framework principal de Flu
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart'
-    as btClassic; // Biblioteca para manejar Bluetooth Classic (perfil serial), usada para audio por PTT.
+as btClassic; // Biblioteca para manejar Bluetooth Classic (perfil serial), usada para audio por PTT.
 import 'dart:typed_data';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_sound/flutter_sound.dart';
@@ -82,14 +82,14 @@ class ControlController extends ChangeNotifier {
   // 🔊 Push-To-Talk (PTT)
   // ────────────────────────────────────────────────────────────────
   final FlutterSoundRecorder _recorder =
-      FlutterSoundRecorder(); // Recorder para PTT
+  FlutterSoundRecorder(); // Recorder para PTT
   bool _isRecorderInitialized = false; // Estado de inicialización del recorder
 
   StreamSubscription<Uint8List>?
   _micSub; // Subscripción al stream de audio del mic
 
   final StreamController<Uint8List> _micController =
-      StreamController<Uint8List>.broadcast(); // Controlador de audio
+  StreamController<Uint8List>.broadcast(); // Controlador de audio
 
   bool isPTTActive = false; // Estado de PTT
 
@@ -139,7 +139,7 @@ class ControlController extends ChangeNotifier {
     _bondMonitorTimer?.cancel(); // Detiene cualquier timer anterior
     _bondMonitorTimer = Timer.periodic(
       const Duration(seconds: 2), // Verifica cada 5 segundos
-      (_) => _checkStillBonded(), // Ejecuta la función privada
+          (_) => _checkStillBonded(), // Ejecuta la función privada
     );
   }
 
@@ -158,10 +158,10 @@ class ControlController extends ChangeNotifier {
     }
     try {
       final bonded =
-          await btClassic.FlutterBluetoothSerial.instance
-              .getBondedDevices(); // Lista de dispositivos emparejados
+      await btClassic.FlutterBluetoothSerial.instance
+          .getBondedDevices(); // Lista de dispositivos emparejados
       final stillPaired = bonded.any(
-        (d) => d.address == _bondedMac,
+            (d) => d.address == _bondedMac,
       ); // Verifica si sigue en la lista
       if (!stillPaired) {
         _fireSetup(); // Si ya no está, dispara el reinicio de configuración
@@ -233,8 +233,8 @@ class ControlController extends ChangeNotifier {
       return; // Si no hay dispositivo conectado, termina la función.
 
     List<BluetoothService> services =
-        await connectedDevice!
-            .discoverServices(); // Obtiene todos los servicios disponibles del dispositivo.
+    await connectedDevice!
+        .discoverServices(); // Obtiene todos los servicios disponibles del dispositivo.
 
     for (var service in services) {
       // Itera por cada servicio encontrado
@@ -301,10 +301,10 @@ class ControlController extends ChangeNotifier {
     }
 
     String asciiCommand =
-        command
-            .map((e) => e.toRadixString(16).padLeft(2, '0'))
-            .join('')
-            .toUpperCase();
+    command
+        .map((e) => e.toRadixString(16).padLeft(2, '0'))
+        .join('')
+        .toUpperCase();
     List<int> asciiBytes = asciiCommand.codeUnits;
 
     try {
@@ -331,8 +331,8 @@ class ControlController extends ChangeNotifier {
         // Procesa los 8 bits de cada byte
         if ((crc & 1) != 0) {
           crc =
-              (crc >> 1) ^
-              0xA001; // Si el bit menos significativo es 1, aplica desplazamiento y XOR con polinomio ModBus
+          (crc >> 1) ^
+          0xA001; // Si el bit menos significativo es 1, aplica desplazamiento y XOR con polinomio ModBus
         } else {
           crc >>= 1; // Si no, solo desplaza a la derecha
         }
@@ -341,7 +341,7 @@ class ControlController extends ChangeNotifier {
 
     // Reordena los bytes: devuelve el low byte primero y luego el high byte (ModBus usa little endian)
     return ((crc & 0xFF) << 8) |
-        ((crc >> 8) & 0xFF); // Combina los bytes en el orden correcto
+    ((crc >> 8) & 0xFF); // Combina los bytes en el orden correcto
   } // FIN calculateCRC
 
   /// =======================//
@@ -459,7 +459,7 @@ class ControlController extends ChangeNotifier {
 
     debugPrint(
       "✅ [ControlController] Horn ON (App) enviado: "
-      "${hornOnFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
+          "${hornOnFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
     );
 
     // 4) Si quieres actualizar inmediatamente el estado del sistema,
@@ -494,7 +494,7 @@ class ControlController extends ChangeNotifier {
 
     debugPrint(
       "✅ [ControlController] Horn OFF (App) enviado: "
-      "${hornOffFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
+          "${hornOffFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
     );
 
     // 4) Volvemos a pedir estado completo para que se refleje en consola:
@@ -528,7 +528,7 @@ class ControlController extends ChangeNotifier {
 
     debugPrint(
       "✅ [ControlController] Wail ON (App) enviado: "
-      "${wailOnFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
+          "${wailOnFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
     );
 
     // 4) Solicitamos de nuevo el estado completo, para que la próxima respuesta
@@ -564,7 +564,7 @@ class ControlController extends ChangeNotifier {
 
     debugPrint(
       "✅ [ControlController] Wail OFF (App) enviado: "
-      "${wailOffFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
+          "${wailOffFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
     );
 
     // 4) Solicitamos nuevamente el estado completo para que la respuesta llegue
@@ -605,7 +605,7 @@ class ControlController extends ChangeNotifier {
     if (!Platform.isAndroid) return null;
     try {
       final bondedDevices =
-          await btClassic.FlutterBluetoothSerial.instance.getBondedDevices();
+      await btClassic.FlutterBluetoothSerial.instance.getBondedDevices();
       return bondedDevices.firstWhere((device) => device.address == mac);
     } catch (_) {
       return null; // No se encontró
@@ -680,9 +680,9 @@ class ControlController extends ChangeNotifier {
     try {
       // 1) Buscamos en la lista de dispositivos emparejados (bonded) por la MAC almacenada
       final bondedDevices =
-          await btClassic.FlutterBluetoothSerial.instance.getBondedDevices();
+      await btClassic.FlutterBluetoothSerial.instance.getBondedDevices();
       final device = bondedDevices.firstWhere(
-        (d) => d.address == _bondedMac,
+            (d) => d.address == _bondedMac,
         orElse: () => throw Exception("Dispositivo emparejado no encontrado"),
       );
 
@@ -702,7 +702,7 @@ class ControlController extends ChangeNotifier {
   }
 
   final StreamController<Uint8List> _audioStreamController =
-      StreamController<Uint8List>();
+  StreamController<Uint8List>();
 
 
   void desconectarBLE() {
@@ -776,7 +776,7 @@ class ControlController extends ChangeNotifier {
         await sendCommand(pttOnFrame);
         debugPrint(
           "✅ [ControlController] PTT ON (App) enviado (iOS): "
-          "${pttOnFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
+              "${pttOnFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
         );
 
         // 4.3) Abrir recorder y suscribir al stream (si no está inicializado)
@@ -837,7 +837,7 @@ class ControlController extends ChangeNotifier {
         await sendCommand(pttOffFrame);
         debugPrint(
           "✅ [ControlController] PTT OFF (App) enviado (iOS): "
-          "${pttOffFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
+              "${pttOffFrame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}",
         );
 
         isPTTActive = false;
@@ -1005,10 +1005,10 @@ class ControlController extends ChangeNotifier {
     characteristic.value.listen((response) {
       // HEX de depuración
       String hex =
-          response
-              .map((e) => e.toRadixString(16).padLeft(2, '0'))
-              .join(' ')
-              .toUpperCase();
+      response
+          .map((e) => e.toRadixString(16).padLeft(2, '0'))
+          .join(' ')
+          .toUpperCase();
       debugPrint("📩 Respuesta HEX recibida: $hex");
 
       // 1️⃣ Detectar si la respuesta es eco ASCII (comienza con '41 41' = 'AA' en ASCII)

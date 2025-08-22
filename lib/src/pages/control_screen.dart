@@ -18,7 +18,7 @@ class ControlScreen extends StatefulWidget {
   final ControlController? controller;
 
   const ControlScreen({Key? key, this.connectedDevice, this.controller})
-    : super(key: key);
+      : super(key: key);
 
   @override
   State<ControlScreen> createState() => _ControlScreenState();
@@ -52,7 +52,7 @@ class _ControlScreenState extends State<ControlScreen>
               Navigator.pushNamedAndRemoveUntil(
                 context,
                 'configuracionBluetooth',
-                (_) => false,
+                    (_) => false,
               );
             }
           });
@@ -174,12 +174,12 @@ class _ControlScreenState extends State<ControlScreen>
               valueListenable: _controller.isBleConnected,
               builder:
                   (_, bleConnected, __) => Image.asset(
-                    bleConnected
-                        ? "assets/images/iconos/iconoBtOn.png"
-                        : "assets/images/iconos/iconoBtOff.png",
-                    width: 60,
-                    height: 60,
-                  ),
+                bleConnected
+                    ? "assets/images/iconos/iconoBtOn.png"
+                    : "assets/images/iconos/iconoBtOff.png",
+                width: 60,
+                height: 60,
+              ),
             ),
           ),
           Positioned(
@@ -206,57 +206,57 @@ class _ControlScreenState extends State<ControlScreen>
               valueListenable: _controller.isBleConnected,
               builder:
                   (_, bleConnected, __) => Consumer<IdiomaController>(
-                    builder: (context, idioma, _) {
-                      final code = idioma.locale.languageCode;
-                      final name = bleConnected ? "desconectar" : "conectar";
-                      final assetPath = _localizedButton(name, code);
-                      return GestureDetector(
-                        onTap: () {
-                          if (bleConnected) {
-                            // Desconectar BLE
-                            _controller.disconnectDevice();
-                            // Desconectar A2DP clásico
-                            BluetoothHelper.disconnectBluetoothAudio().then((
-                              ok,
+                builder: (context, idioma, _) {
+                  final code = idioma.locale.languageCode;
+                  final name = bleConnected ? "desconectar" : "conectar";
+                  final assetPath = _localizedButton(name, code);
+                  return GestureDetector(
+                    onTap: () {
+                      if (bleConnected) {
+                        // Desconectar BLE
+                        _controller.disconnectDevice();
+                        // Desconectar A2DP clásico
+                        BluetoothHelper.disconnectBluetoothAudio().then((
+                            ok,
                             ) {
-                              print(
-                                '🔊 A2DP clásico desconectado por botón: $ok',
-                              );
-                            });
+                          print(
+                            '🔊 A2DP clásico desconectado por botón: $ok',
+                          );
+                        });
+                      } else {
+                        // Plan A: conectar BLE
+                        _controller.conectarManualBLE(context).then((
+                            okBle,
+                            ) {
+                          if (okBle && widget.connectedDevice != null) {
+                            _controller.setDeviceBond(
+                              widget.connectedDevice!,
+                            );
+                            _controller.startBatteryStatusMonitoring();
+                            _controller.requestSystemStatus();
                           } else {
-                            // Plan A: conectar BLE
-                            _controller.conectarManualBLE(context).then((
-                              okBle,
-                            ) {
-                              if (okBle && widget.connectedDevice != null) {
-                                _controller.setDeviceBond(
-                                  widget.connectedDevice!,
-                                );
-                                _controller.startBatteryStatusMonitoring();
-                                _controller.requestSystemStatus();
-                              } else {
-                                // Plan B: conectar A2DP clásico
-                                BluetoothHelper.connectBluetoothAudio().then((
-                                  okClassic,
+                            // Plan B: conectar A2DP clásico
+                            BluetoothHelper.connectBluetoothAudio().then((
+                                okClassic,
                                 ) {
-                                  print(
-                                    '🔊 A2DP clásico conectado por botón: $okClassic',
-                                  );
-                                  if (!okClassic && Platform.isAndroid) {
-                                    AndroidIntent(
-                                      action:
-                                          'android.settings.BLUETOOTH_SETTINGS',
-                                    ).launch();
-                                  }
-                                });
+                              print(
+                                '🔊 A2DP clásico conectado por botón: $okClassic',
+                              );
+                              if (!okClassic && Platform.isAndroid) {
+                                AndroidIntent(
+                                  action:
+                                  'android.settings.BLUETOOTH_SETTINGS',
+                                ).launch();
                               }
                             });
                           }
-                        },
-                        child: Image.asset(assetPath, width: w * 0.75),
-                      );
+                        });
+                      }
                     },
-                  ),
+                    child: Image.asset(assetPath, width: w * 0.75),
+                  );
+                },
+              ),
             ),
           ),
         ],

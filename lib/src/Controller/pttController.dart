@@ -9,7 +9,7 @@ import 'dart:io' show Platform;
 class PttAudioController {
   final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
   final StreamController<Uint8List> _audioStreamController =
-      StreamController<Uint8List>();
+  StreamController<Uint8List>();
 
   bool _isRecorderInitialized = false;
   BluetoothConnection? classicConnection;

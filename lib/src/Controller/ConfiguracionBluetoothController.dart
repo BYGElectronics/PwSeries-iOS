@@ -113,9 +113,9 @@ class ConfiguracionBluetoothController extends ChangeNotifier {
     _scanSub = ble.FlutterBluePlus.scanResults.listen((results) {
       for (final r in results) {
         final visibleName =
-            r.device.platformName.isNotEmpty
-                ? r.device.platformName
-                : r.advertisementData.advName;
+        r.device.platformName.isNotEmpty
+            ? r.device.platformName
+            : r.advertisementData.advName;
         final lower = visibleName.toLowerCase();
 
         if (lower.contains('btpw')) {
@@ -212,7 +212,7 @@ class ConfiguracionBluetoothController extends ChangeNotifier {
         for (final c in s.characteristics) {
           final cu = c.uuid.toString().toLowerCase();
           final matchesCandidate = authCharCandidates.any(
-            (frag) => cu.contains(frag),
+                (frag) => cu.contains(frag),
           );
           final canWrite =
               c.properties.write || c.properties.writeWithoutResponse;
@@ -233,9 +233,9 @@ class ConfiguracionBluetoothController extends ChangeNotifier {
           for (final c in s.characteristics) {
             debugPrint(
               '    ↳ Char: ${c.uuid} '
-              '(write=${c.properties.write}, '
-              'writeNR=${c.properties.writeWithoutResponse}, '
-              'notify=${c.properties.notify})',
+                  '(write=${c.properties.write}, '
+                  'writeNR=${c.properties.writeWithoutResponse}, '
+                  'notify=${c.properties.notify})',
             );
           }
         }

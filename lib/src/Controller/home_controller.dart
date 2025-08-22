@@ -57,10 +57,10 @@ class HomeController {
     FlutterBluePlus.scanResults.listen((results) {
       bleDevices.value = results;
       List<ScanResult> validDevices =
-          results.where((r) {
-            String deviceName = r.device.platformName;
-            return deviceName.contains("BTPW") || deviceName.contains("BTPW");
-          }).toList();
+      results.where((r) {
+        String deviceName = r.device.platformName;
+        return deviceName.contains("BTPW") || deviceName.contains("BTPW");
+      }).toList();
 
       filteredDevices.value = validDevices;
       debugPrint("Dispositivos filtrados: ${filteredDevices.value.length}");

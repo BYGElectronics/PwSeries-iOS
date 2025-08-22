@@ -32,9 +32,9 @@ class IdiomaController extends ChangeNotifier {
       final soportados = ['es', 'en', 'fr', 'pt'];
 
       _locale =
-          soportados.contains(sistema)
-              ? Locale(sistema)
-              : const Locale('es'); // predeterminado
+      soportados.contains(sistema)
+          ? Locale(sistema)
+          : const Locale('es'); // predeterminado
     }
 
     notifyListeners();

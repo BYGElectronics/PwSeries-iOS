@@ -131,9 +131,9 @@ class EstadoSistemaController extends ChangeNotifier {
 
     debugPrint(
       '[EstadoSistema] Función (0x${code.toRadixString(16)}) → '
-      'T04: {sirena:$sirenaT04,aux:$auxT04,horn:$hornT04,wail:$wailT04,ptt:$pttT04,inter:$interT04}, '
-      'App: {sirena:$sirenaApp,aux:$auxApp,horn:$hornApp,wail:$wailApp,ptt:$pttApp,inter:$interApp}, '
-      'luz:$luzActiva, none:$noFuncionesActivas',
+          'T04: {sirena:$sirenaT04,aux:$auxT04,horn:$hornT04,wail:$wailT04,ptt:$pttT04,inter:$interT04}, '
+          'App: {sirena:$sirenaApp,aux:$auxApp,horn:$hornApp,wail:$wailApp,ptt:$pttApp,inter:$interApp}, '
+          'luz:$luzActiva, none:$noFuncionesActivas',
     );
     notifyListeners();
   }
@@ -160,7 +160,7 @@ class EstadoSistemaController extends ChangeNotifier {
 
     debugPrint(
       '[EstadoSistema] Batería (0x${code.toRadixString(16)}) → '
-      'percent: $batteryPercent%, on:$carroEncendido, mid:$bateriaMedia, low:$bateriaBaja',
+          'percent: $batteryPercent%, on:$carroEncendido, mid:$bateriaMedia, low:$bateriaBaja',
     );
     notifyListeners();
   }

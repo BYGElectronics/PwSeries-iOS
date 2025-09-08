@@ -1,8 +1,9 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:shared_preferences/shared_preferences.dart'; // no se usa aquí
 
 // CONTROLADORES
 import 'package:pw/src/Controller/control_controller.dart';
@@ -36,23 +37,9 @@ import 'package:pw/src/pages/text_size_screen.dart';
 /// Instancia única de ControlController que se compartirá globalmente
 final ControlController _controlController = ControlController();
 
-/// Key del flag de onboarding/config inicial
-const String kSetupFlagKey = 'setupInicialCompletado';
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 1) Pide permiso de micrófono (si aplica a tu flujo)
   await Permission.microphone.request();
-
-  // 2) Lee la bandera ANTES de runApp
-  final prefs = await SharedPreferences.getInstance();
-  final bool yaConfiguroPin = prefs.getBool(kSetupFlagKey) ?? false;
-
-  // 3) Decide la ruta inicial: /control si ya configuró; /home si no
-  //    (Si quieres mantener un splash, puedes mandar a "/" y que sea
-  //     el Splash quien redirija, pero aquí vamos directo y consistente.)
-  final String startRoute = yaConfiguroPin ? "/control" : "/home";
 
   runApp(
     MultiProvider(
@@ -73,26 +60,14 @@ Future<void> main() async {
           value: _controlController,
         ),
       ],
-      child: MyAppWrapper(startRoute: startRoute),
+      child: const MyApp(),
     ),
   );
 }
 
-/// Un wrapper intermedio para separar MultiProvider de MyApp
-class MyAppWrapper extends StatelessWidget {
-  final String startRoute;
-  const MyAppWrapper({super.key, required this.startRoute});
-
-  @override
-  Widget build(BuildContext context) {
-    return MyApp(startRoute: startRoute);
-  }
-}
-
 /// La aplicación principal
 class MyApp extends StatefulWidget {
-  final String startRoute;
-  const MyApp({super.key, required this.startRoute});
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -153,8 +128,7 @@ class _MyAppState extends State<MyApp> {
       // =============================
       //        RUTAS / ROUTES
       // =============================
-      // Usamos la ruta calculada en main()
-      initialRoute: widget.startRoute,
+      initialRoute: '/',
       routes: {
         "/": (context) => const SplashScreen(),
         "/home": (context) => HomeScreen(
@@ -162,7 +136,7 @@ class _MyAppState extends State<MyApp> {
           themeMode: themeController.themeMode,
         ),
         "/idioma": (context) => const IdiomaScreen(),
-        "/configuracionBluetooth": (context) => ConfiguracionBluetoothScreen(),
+        "/configuracionBluetooth": (context) => const ConfiguracionBluetoothScreen(),
         "/configAvanzada": (context) => const ConfigAvanzadaScreen(),
         "/configTeclado": (context) => ConfigTecladoScreen(controller: _controlController),
         "/themeConfig": (context) => const ThemeScreen(),
@@ -179,20 +153,32 @@ class _MyAppState extends State<MyApp> {
             controller: args['controller'] as ControlController,
           );
         },
+
+        // ✅ Acepta 'device' o 'deviceId' y pasa 'savedDeviceId' a ControlScreen
         "/control": (context) {
           final settings = ModalRoute.of(context)!.settings;
           final args = settings.arguments;
-          BluetoothDevice? device;
-          if (args is Map<String, dynamic> && args['device'] is BluetoothDevice) {
-            device = args['device'] as BluetoothDevice;
-          } else {
-            device = _controlController.connectedDevice;
+
+          BluetoothDevice? device = _controlController.connectedDevice;
+          String? deviceId;
+
+          if (args is Map<String, dynamic>) {
+            if (args['device'] is BluetoothDevice) {
+              device = args['device'] as BluetoothDevice;
+            }
+            if (args['deviceId'] is String) {
+              deviceId = args['deviceId'] as String;
+            }
           }
+
           return ControlScreen(
             connectedDevice: device,
             controller: _controlController,
+            // 👇 nuevo parámetro en ControlScreen para reconectar por MAC
+            savedDeviceId: deviceId,
           );
         },
+
         "/controlConfig": (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
           return ControlConfigScreen(

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:android_intent_plus/android_intent.dart';
-import '../Controller/bluetooth_helper.dart'; // o 'package:pw/src/utils/bluetooth_helper.dart' si lo tienes ahí
+import '../Controller/bluetooth_helper.dart';
 import 'package:pw/src/Controller/control_controller.dart';
 import 'package:pw/widgets/header_menu_widget.dart';
 import '../../widgets/drawerMenuWidget.dart';
@@ -16,9 +16,14 @@ import '../Controller/idioma_controller.dart';
 class ControlScreen extends StatefulWidget {
   final BluetoothDevice? connectedDevice;
   final ControlController? controller;
+  final String? savedDeviceId; // 👈 nuevo
 
-  const ControlScreen({Key? key, this.connectedDevice, this.controller})
-      : super(key: key);
+  const ControlScreen({
+    Key? key,
+    this.connectedDevice,
+    this.controller,
+    this.savedDeviceId,
+  }) : super(key: key);
 
   @override
   State<ControlScreen> createState() => _ControlScreenState();
@@ -26,7 +31,7 @@ class ControlScreen extends StatefulWidget {
 
 class _ControlScreenState extends State<ControlScreen>
     with WidgetsBindingObserver {
-  late final ControlController _controller;
+  late final ControlController _controller; // ✅ se asigna una sola vez
   VoidCallback? _bondListener;
   bool _resumeAuto = false;
 
@@ -35,37 +40,30 @@ class _ControlScreenState extends State<ControlScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    // ✅ Asignar SOLO una vez
     _controller = widget.controller ?? ControlController();
-    context.read<EstadoSistemaController>().startPolling(
-      const Duration(seconds: 1),
-    );
+
+    // Si ya haces startPolling en el provider con lazy:false, puedes omitir esta línea.
+    context.read<EstadoSistemaController>().startPolling(const Duration(seconds: 1));
 
     if (widget.connectedDevice != null) {
-      // Si viene un dispositivo BLE, lo configura directamente
       _controller.setDevice(widget.connectedDevice!);
       _controller.setDeviceBond(widget.connectedDevice!);
-
-      _bondListener = () {
-        if (_controller.shouldSetup.value) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (context.mounted) {
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                'configuracionBluetooth',
-                    (_) => false,
-              );
-            }
-          });
-        }
-      };
-      _controller.shouldSetup.addListener(_bondListener!);
       _controller.startBatteryStatusMonitoring();
       _controller.requestSystemStatus();
-    } else {
-      // Si no viene dispositivo, intenta reconectar automáticamente
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _controller.conectarManualBLE(context);
+    } else if ((widget.savedDeviceId ?? '').isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final ok = await _controller.conectarPorId(context, widget.savedDeviceId!);
+        if (ok && _controller.connectedDevice != null) {
+          _controller.setDeviceBond(_controller.connectedDevice!);
+          _controller.startBatteryStatusMonitoring();
+          _controller.requestSystemStatus();
+        } else {
+          _controller.conectarManualBLE(context, silent: true);
+        }
       });
+    } else {
+      _controller.conectarManualBLE(context);
     }
 
     // Auto–conectar A2DP y marcar reanudación
@@ -78,7 +76,6 @@ class _ControlScreenState extends State<ControlScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-
     if (_bondListener != null) {
       _controller.shouldSetup.removeListener(_bondListener!);
       _bondListener = null;
@@ -92,13 +89,11 @@ class _ControlScreenState extends State<ControlScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
-    // Cuando la app va a background o inactivo, desconecta TODO
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       _disconnectAll();
     }
 
-    // Al volver al foreground, reintenta A2DP
     if (state == AppLifecycleState.resumed && _resumeAuto) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _autoConnectA2dp());
     }
@@ -109,25 +104,17 @@ class _ControlScreenState extends State<ControlScreen>
       }
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      _controller.disconnectDevice(); // Desconecta BLE automáticamente
+      _controller.disconnectDevice();
     }
   }
 
-  /// Desconecta BLE y Classic A2DP de forma no bloqueante
   void _disconnectAll() {
-    // Desconectar BLE
     _controller.disconnectDevice();
-    print('🔌 BLE desconectado al background/swipe');
-
-    // Desconectar Classic A2DP
     BluetoothHelper.disconnectBluetoothAudio();
-    print('🔌 A2DP clásico desconectado al background/swipe');
   }
 
-  /// Intenta conectar A2DP al dispositivo "BTPW"
   void _autoConnectA2dp() {
     BluetoothHelper.connectBluetoothAudio().then((ok) {
-      print('🔊 A2DP auto–conectado: $ok');
       if (!ok && Platform.isAndroid) {
         AndroidIntent(action: 'android.settings.BLUETOOTH_SETTINGS').launch();
       }
@@ -137,16 +124,11 @@ class _ControlScreenState extends State<ControlScreen>
   String _localizedButton(String name, String code) {
     const folder = "assets/images/Botones";
     switch (code) {
-      case 'es':
-        return "$folder/Espanol/$name.png";
-      case 'en':
-        return "$folder/Ingles/${name}_1.png";
-      case 'pt':
-        return "$folder/Portugues/${name}_3.png";
-      case 'fr':
-        return "$folder/Frances/${name}_2.png";
-      default:
-        return "$folder/Espanol/$name.png";
+      case 'es': return "$folder/Espanol/$name.png";
+      case 'en': return "$folder/Ingles/${name}_1.png";
+      case 'pt': return "$folder/Portugues/${name}_3.png";
+      case 'fr': return "$folder/Frances/${name}_2.png";
+      default:   return "$folder/Espanol/$name.png";
     }
   }
 
@@ -163,34 +145,37 @@ class _ControlScreenState extends State<ControlScreen>
         alignment: Alignment.center,
         children: [
           const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
+            top: 0, left: 0, right: 0,
             child: HeaderMenuWidget(),
           ),
           Positioned(
             top: h * 0.22,
             child: ValueListenableBuilder<bool>(
               valueListenable: _controller.isBleConnected,
-              builder:
-                  (_, bleConnected, __) => Image.asset(
+              builder: (_, bleConnected, __) => Image.asset(
                 bleConnected
                     ? "assets/images/iconos/iconoBtOn.png"
                     : "assets/images/iconos/iconoBtOff.png",
-                width: 60,
-                height: 60,
+                width: 60, height: 60,
               ),
             ),
           ),
+
+          // Fondo centrado
           Positioned(
-            top: h * 0.40,
-            child: Image.asset(
-              "assets/images/tecladoPw/fondo/fondoPrincipal.png",
+            top: (h - fh) / 2,
+            left: (w - fw) / 2,
+            child: SizedBox(
               width: fw,
               height: fh,
-              fit: BoxFit.contain,
+              child: Image.asset(
+                "assets/images/tecladoPw/fondo/fondoPrincipal.png",
+                fit: BoxFit.contain,
+              ),
             ),
           ),
+
+          // Teclado
           Positioned(
             top: h * 0.42,
             child: TecladoPW(
@@ -200,12 +185,13 @@ class _ControlScreenState extends State<ControlScreen>
               fondoHeight: fh,
             ),
           ),
+
+          // Botón conectar/desconectar
           Positioned(
             bottom: 75,
             child: ValueListenableBuilder<bool>(
               valueListenable: _controller.isBleConnected,
-              builder:
-                  (_, bleConnected, __) => Consumer<IdiomaController>(
+              builder: (_, bleConnected, __) => Consumer<IdiomaController>(
                 builder: (context, idioma, _) {
                   final code = idioma.locale.languageCode;
                   final name = bleConnected ? "desconectar" : "conectar";
@@ -213,40 +199,18 @@ class _ControlScreenState extends State<ControlScreen>
                   return GestureDetector(
                     onTap: () {
                       if (bleConnected) {
-                        // Desconectar BLE
                         _controller.disconnectDevice();
-                        // Desconectar A2DP clásico
-                        BluetoothHelper.disconnectBluetoothAudio().then((
-                            ok,
-                            ) {
-                          print(
-                            '🔊 A2DP clásico desconectado por botón: $ok',
-                          );
-                        });
+                        BluetoothHelper.disconnectBluetoothAudio();
                       } else {
-                        // Plan A: conectar BLE
-                        _controller.conectarManualBLE(context).then((
-                            okBle,
-                            ) {
+                        _controller.conectarManualBLE(context).then((okBle) {
                           if (okBle && widget.connectedDevice != null) {
-                            _controller.setDeviceBond(
-                              widget.connectedDevice!,
-                            );
+                            _controller.setDeviceBond(widget.connectedDevice!);
                             _controller.startBatteryStatusMonitoring();
                             _controller.requestSystemStatus();
                           } else {
-                            // Plan B: conectar A2DP clásico
-                            BluetoothHelper.connectBluetoothAudio().then((
-                                okClassic,
-                                ) {
-                              print(
-                                '🔊 A2DP clásico conectado por botón: $okClassic',
-                              );
+                            BluetoothHelper.connectBluetoothAudio().then((okClassic) {
                               if (!okClassic && Platform.isAndroid) {
-                                AndroidIntent(
-                                  action:
-                                  'android.settings.BLUETOOTH_SETTINGS',
-                                ).launch();
+                                AndroidIntent(action: 'android.settings.BLUETOOTH_SETTINGS').launch();
                               }
                             });
                           }

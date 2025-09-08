@@ -10,7 +10,7 @@ class HeaderWidgetBack extends StatelessWidget {
     final screenHeight = MediaQuery.of(context).size.height;
 
     // Calcular altura del header responsiva
-    final headerHeight = screenHeight * 0.15;
+    final headerHeight = screenHeight * 0.17;
 
     return SizedBox(
       width: screenWidth,
@@ -24,8 +24,8 @@ class HeaderWidgetBack extends StatelessWidget {
             fit: BoxFit.cover,
           ),
           Positioned(
-            right: 4,
-            top: headerHeight * 0.31,
+            right: -5,
+            top: headerHeight * 0.35,
             child: IconButton(
               icon: const Icon(
                 Icons.arrow_circle_left_rounded, // Flecha más recta y moderna

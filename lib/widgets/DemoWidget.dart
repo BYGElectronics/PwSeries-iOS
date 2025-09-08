@@ -316,7 +316,7 @@ class _DemowidgetState extends State<Demowidget> {
               height: fh * 0.40,
             ),
             _buildSimpleButton(
-              asset: "assets/images/tecladoPw/botones/On/interOn.png",
+              asset: "assets/images/tecladoPw/botones/Off/interOff.png",
               onTap: _showNotAvailable,
               width: fw * 0.25,
               height: fh * 0.35,
@@ -345,8 +345,8 @@ class _DemowidgetState extends State<Demowidget> {
               height: fh * 0.30,
             ),
             _buildPressHoldButton(
-              assetOn: "assets/images/tecladoPw/botones/On/pttOn.png",
-              assetOff: "assets/images/tecladoPw/botones/On/pttOn.png",
+              assetOn: "assets/images/tecladoPw/botones/Off/pttOff.png",
+              assetOff: "assets/images/tecladoPw/botones/Off/pttOff.png",
               onPress: _showNotAvailable,
               onRelease: () {},
               width: fw * 0.25,

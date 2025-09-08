@@ -11,7 +11,7 @@ class HeaderMenuWidget extends StatelessWidget {
     final screenHeight = MediaQuery.of(context).size.height;
 
     // Calcular altura del header responsiva (incluye status bar)
-    final headerHeight = screenHeight * 0.15;
+    final headerHeight = screenHeight * 0.17;
     // Altura de la barra de estado (notch / status bar)
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
@@ -30,8 +30,8 @@ class HeaderMenuWidget extends StatelessWidget {
 
           // Botón hamburguesa
           Positioned(
-            left: 8,
-            top: statusBarHeight + 4, // para separarlo del notch/status bar
+            left: 1,
+            top: statusBarHeight + 8, // para separarlo del notch/status bar
             child: Builder(
               builder:
                   (ctx) => IconButton(

@@ -201,6 +201,29 @@ class ControlController extends ChangeNotifier {
     }
   }
 
+  Future<bool> conectarPorId(BuildContext context, String targetId) async {
+    try {
+      // 1) Escanea breve y busca el ID
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
+      final subs = FlutterBluePlus.scanResults.listen((results) async {
+        for (final r in results) {
+          if (r.device.remoteId.str == targetId) {
+            await FlutterBluePlus.stopScan();
+            await r.device.connect(autoConnect: false);
+            connectedDevice = r.device;
+          }
+        }
+      });
+      await Future.delayed(const Duration(seconds: 6));
+      await subs.cancel();
+
+      return connectedDevice != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+
   /// Cierra manualmente la conexión Classic (si está activa).
   Future<void> disconnectClassic() async {
     await _deactivateBluetoothClassic(); // Lógica de desconexión interna (privada)

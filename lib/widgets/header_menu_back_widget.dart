@@ -10,7 +10,7 @@ class HeaderMenuBackWidget extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    final headerHeight = screenHeight * 0.15;
+    final headerHeight = screenHeight * 0.17;
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return SizedBox(
@@ -28,7 +28,7 @@ class HeaderMenuBackWidget extends StatelessWidget {
 
           // Botón menú hamburguesa (izquierda)
           Positioned(
-            left: 8,
+            left: 1,
             top: statusBarHeight + 8,
             child: Builder(
               builder:
@@ -41,8 +41,8 @@ class HeaderMenuBackWidget extends StatelessWidget {
 
           // Botón volver (derecha)
           Positioned(
-            right: 5,
-            top: statusBarHeight + 8,
+            right: -5,
+            top: statusBarHeight + 5,
             child: IconButton(
               icon: const Icon(
                 Icons.arrow_circle_left_rounded,

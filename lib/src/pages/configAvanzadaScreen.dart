@@ -45,7 +45,7 @@ class ConfigAvanzadaScreen extends StatelessWidget {
 
                 // 2) Contenido principal
                 Positioned(
-                  top: screenHeight * 0.18,
+                  top: screenHeight * 0.21,
                   left: 27,
                   right: 27,
                   bottom: 0,
@@ -58,7 +58,7 @@ class ConfigAvanzadaScreen extends StatelessWidget {
                           localizer.translate('config_avanzada'),
                           style: TextStyle(
                             fontFamily: 'PWSeriesFont',
-                            fontSize: 25,
+                            fontSize: 23,
                             fontWeight: FontWeight.bold,
                             color: theme.textTheme.bodyLarge?.color,
                           ),

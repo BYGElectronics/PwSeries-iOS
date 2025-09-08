@@ -3,7 +3,7 @@ description: "App Pw"
 
 publish_to: 'none'
 
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: ^3.7.0
@@ -12,11 +12,10 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8 #
+  cupertino_icons: ^1.0.8
   flutter_launcher_icons: ^0.14.4
   flutter_bluetooth_serial:
     path: lib_plugins/flutter_bluetooth_serial
-
 
   android_intent_plus: ^5.3.1
   flutter_blue_plus: ^1.35.3
@@ -31,12 +30,20 @@ dependencies:
   url_launcher: ^6.3.1
   device_preview: ^1.2.0
   audioplayers: ^6.5.0
+  flutter_native_splash: ^2.4.6
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+
+flutter_native_splash:
+  ios: true
+  android: false
+  color: "#000000" # o el color de fondo de tu splash
+  image: assets/images/splash_screens/SPLASH.png
+  ios_content_mode: scaleAspectFill
 
 flutter_launcher_icons:
   android: true
@@ -62,6 +69,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/update.png
     - assets/images/desarrollado_por/
     - assets/images/temas/
     - assets/images/idiomas/

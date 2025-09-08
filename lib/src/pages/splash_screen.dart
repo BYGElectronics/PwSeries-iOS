@@ -1,70 +1,85 @@
 // lib/src/pages/splash_screen.dart
-
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+const kIsPinConfiguredKey = 'is_pin_configured_ok';
+const kSavedDeviceIdKey   = 'saved_btpw_id';
 
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-/// Clave única para saber si el PIN ya se estableció correctamente.
-/// En tu flujo de configuración, cuando el PIN quede OK:
-///   final prefs = await SharedPreferences.getInstance();
-///   await prefs.setBool(kIsPinConfiguredKey, true);
-const String kIsPinConfiguredKey = 'is_pin_configured_ok';
-
 class _SplashScreenState extends State<SplashScreen> {
+  bool _navigated = false;
+
   @override
   void initState() {
     super.initState();
-    // Si por alguna razón se ejecuta en otra plataforma, simplemente continúa (no hace conexiones).
-    unawaited(_boot());
+    // Espera al primer frame para asegurar que el splash pinte
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Precarga de la imagen (opcional, ayuda a evitar parpadeos)
+      await precacheImage(
+        const AssetImage('assets/images/splash_screens/SPLASH.png'),
+        context,
+      );
+      _boot();
+    });
   }
 
   Future<void> _boot() async {
-    // 1) Pequeño delay para mostrar el splash (opcional)
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
+    // Pequeño delay opcional para que el splash se vea
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted || _navigated) return;
 
-    // 2) Leer bandera de PIN desde preferencias
     final prefs = await SharedPreferences.getInstance();
-    final bool isPinConfigured = prefs.getBool(kIsPinConfiguredKey) ?? false;
+    final isPinConfigured = prefs.getBool(kIsPinConfiguredKey) ?? false;
+    final savedId = prefs.getString(kSavedDeviceIdKey);
 
-    // 3) Decidir navegación SIN iniciar ninguna conexión
-    if (!mounted) return;
+    _navigated = true;
+
     if (isPinConfigured) {
-      // PIN OK → ir a control
-      _goTo('/control');
+      // ✅ Ir a /control y, si hay MAC guardada, pasarla como argumento
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/control',
+            (route) => false,
+        arguments: (savedId != null && savedId.isNotEmpty)
+            ? {'deviceId': savedId}
+            : null,
+      );
     } else {
-      // PIN NO configurado → ir a configuración inicial
-      _goTo('/home');
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     }
-  }
-
-  void _goTo(String routeName) {
-    if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(routeName);
   }
 
   @override
   Widget build(BuildContext context) {
-    // UI de splash full-screen
-    return Scaffold(
-      body: Center(
-        child: Image.asset(
-          "assets/images/splash_screens/splash_screen.png",
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          errorBuilder: (ctx, error, stack) => Container(
-            color: Colors.black,
-            child: const Icon(Icons.error, color: Colors.red, size: 48),
-          ),
+    return WillPopScope(
+      // 🔒 desactiva "back" mientras se muestra el splash
+      onWillPop: () async => false,
+      child: Scaffold(
+        backgroundColor: Colors.black, // fallback por si el asset tarda
+        body: const SizedBox.expand(child: _SplashImage()),
+      ),
+    );
+  }
+}
+
+class _SplashImage extends StatelessWidget {
+  const _SplashImage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      'assets/images/splash_screens/SPLASH.png',
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (ctx, err, st) => const ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: Icon(Icons.error, color: Colors.red, size: 48),
         ),
       ),
     );

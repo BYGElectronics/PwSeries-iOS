@@ -1,15 +1,23 @@
 // lib/src/pages/configuracionBluetoothScreen.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pw/widgets/header_widget_back.dart';
 
 import '../../widgets/TecladoPinWidget.dart';
-import '../../widgets/header_widget.dart';
+// import '../../widgets/header_widget.dart'; // <- no se usa, lo quité
 import '../Controller/ConfiguracionBluetoothController.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+
+const kIsPinConfiguredKey = 'is_pin_configured_ok';
+const kSavedDeviceIdKey   = 'saved_btpw_id';
+const kSavedDeviceNameKey = 'saved_btpw_name';
 
 class ConfiguracionBluetoothScreen extends StatelessWidget {
   const ConfiguracionBluetoothScreen({Key? key}) : super(key: key);
+
 
   @override
   Widget build(BuildContext context) {
@@ -20,8 +28,43 @@ class ConfiguracionBluetoothScreen extends StatelessWidget {
   }
 }
 
-class _ConfiguracionBluetoothView extends StatelessWidget {
+class _ConfiguracionBluetoothView extends StatefulWidget {
   const _ConfiguracionBluetoothView({Key? key}) : super(key: key);
+
+  @override
+  State<_ConfiguracionBluetoothView> createState() =>
+      _ConfiguracionBluetoothViewState();
+}
+
+class _ConfiguracionBluetoothViewState
+    extends State<_ConfiguracionBluetoothView> {
+  Timer? _timeoutTimer;
+  bool _timeoutElapsed = false; // tras 10s, cambia el mensaje
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimeout();
+  }
+
+  void _startTimeout() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(seconds: 10), () {
+      if (!mounted) return;
+      setState(() => _timeoutElapsed = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timeoutTimer?.cancel();
+    super.dispose();
+  }
+
+  bool _isBtpwName(String? name) {
+    final n = (name ?? '').trim();
+    return n.toUpperCase().contains('BTPW');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +72,15 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
     final h = MediaQuery.of(context).size.height;
     final theme = Theme.of(context);
     final controller = context.watch<ConfiguracionBluetoothController>();
+
+    // Filtra SOLO dispositivos BTPW
+    final btpwList = controller.dispositivosEncontrados.where((d) {
+      try {
+        return _isBtpwName(d.name);
+      } catch (_) {
+        return false;
+      }
+    }).toList();
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -51,6 +103,7 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ⚓️ TÍTULO FIJO
                 Center(
                   child: Text(
                     'DISPOSITIVOS DISPONIBLES',
@@ -60,32 +113,68 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: theme.textTheme.bodyLarge?.color,
                     ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
                 Divider(thickness: 2, color: theme.dividerColor),
                 SizedBox(height: h * 0.01),
 
-                // Lista o mensaje de búsqueda
+                // ↓ SOLO cambia esta zona (mensaje/lista + update)
                 Expanded(
-                  child: controller.dispositivosEncontrados.isEmpty
-                      ? Center(
-                    child: Text(
-                      'Buscando dispositivos...',
-                      style: TextStyle(
-                        fontFamily: 'Roboto',
-                        fontSize: w * 0.05,
-                        fontWeight: FontWeight.bold,
-                        color: theme.textTheme.bodyLarge?.color,
+                  child: btpwList.isEmpty
+                      ? LayoutBuilder(
+                    builder: (context, c) => Center(
+                      // Bloque centrado siempre, con adaptación de tamaño
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              // límite de ancho para que FittedBox pueda escalar hacia abajo
+                              maxWidth: c.maxWidth * 0.9,
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _timeoutElapsed
+                                    ? 'No hay Dispositivo BTPW disponibles...'
+                                    : 'Buscando dispositivos...',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontSize: w * 0.05,
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.textTheme.bodyLarge?.color,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Imagen "update.png" (reintento)
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _timeoutElapsed = false);
+                              _startTimeout();
+                              context
+                                  .read<ConfiguracionBluetoothController>()
+                                  .iniciarEscaneo();
+                            },
+                            child: Image.asset(
+                              'assets/images/update.png', // ajusta el path si es otro
+                              width: w * 0.15,
+                              fit: BoxFit.contain,
+                              filterQuality: FilterQuality.high,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   )
                       : ListView(
-                    children: controller.dispositivosEncontrados
-                        .where(
-                          (d) =>
-                      controller.selectedDevice == null ||
-                          controller.selectedDevice!.id == d.id,
-                    )
+                    children: btpwList
+                        .where((d) =>
+                    controller.selectedDevice == null ||
+                        controller.selectedDevice!.id == d.id)
                         .map((d) {
                       final showPin =
                           controller.selectedDevice?.id == d.id;
@@ -112,13 +201,13 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
                                         fontFamily: 'PWSeriesFont',
                                         fontSize: w * 0.05,
                                         fontWeight: FontWeight.bold,
-                                        color: theme.textTheme.bodyLarge
-                                            ?.color,
+                                        color: theme
+                                            .textTheme.bodyLarge?.color,
                                       ),
                                     ),
                                     SizedBox(height: h * 0.001),
                                     Text(
-                                      d.id, // <-- antes: d.address
+                                      d.id, // antes: d.address
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(
                                         fontSize: w * 0.020,
@@ -152,45 +241,45 @@ class _ConfiguracionBluetoothView extends StatelessWidget {
                               crossAxisAlignment:
                               CrossAxisAlignment.center,
                               children: [
-                                // Mostrar PIN ingresado como ••••
                                 Text(
-                                  controller.pinIngresado.replaceAll(
-                                    RegExp(r'.'),
-                                    '•',
-                                  ),
+                                  controller.pinIngresado
+                                      .replaceAll(RegExp(r'.'), '•'),
                                   style: TextStyle(
                                     fontSize: w * 0.08,
                                     letterSpacing: w * 0.01,
-                                    color:
-                                    theme.textTheme.bodyLarge?.color,
+                                    color: theme
+                                        .textTheme.bodyLarge?.color,
                                   ),
+                                  textAlign: TextAlign.center,
                                 ),
                                 SizedBox(height: h * 0.01),
 
-                                // Teclado numérico
                                 SizedBox(
                                   height: h * 0.70,
                                   child: TecladoPinWidget(
-                                    onPinComplete: (pin) async {
-                                      // 1) Guardar PIN en el controlador
-                                      controller.pinIngresado = pin;
+                                      onPinComplete: (pin) async {
+                                        controller.pinIngresado = pin;
+                                        await controller.enviarPinYConectar(context);
 
-                                      // 2) Intentar conectar con el PIN (BLE + auth)
-                                      await controller
-                                          .enviarPinYConectar(context);
+                                        if (controller.ultimoResultadoConexion == true) {
+                                          final prefs = await SharedPreferences.getInstance();
+                                          final String deviceId   = d.id;   // la MAC/RemoteId del item 'd'
+                                          final String deviceName = d.name;
 
-                                      // 3) Si todo OK, ir al Control
-                                      if (controller
-                                          .ultimoResultadoConexion ==
-                                          true) {
-                                        if (context.mounted) {
-                                          Navigator.of(context)
-                                              .pushReplacementNamed(
-                                            '/control',
-                                          );
+                                          await prefs.setBool(kIsPinConfiguredKey, true);
+                                          await prefs.setString(kSavedDeviceIdKey, deviceId);
+                                          await prefs.setString(kSavedDeviceNameKey, deviceName);
+
+                                          if (context.mounted) {
+                                            Navigator.of(context).pushNamedAndRemoveUntil(
+                                              '/control',
+                                                  (route) => false,
+                                              arguments: {'deviceId': deviceId}, // pasa la MAC a /control
+                                            );
+                                          }
                                         }
                                       }
-                                    },
+
                                   ),
                                 ),
                               ],

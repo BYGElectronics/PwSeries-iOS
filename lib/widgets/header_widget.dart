@@ -10,7 +10,7 @@ class HeaderWidget extends StatelessWidget {
     final screenHeight = MediaQuery.of(context).size.height;
 
     // Calcular altura del header responsiva
-    final headerHeight = screenHeight * 0.15;
+    final headerHeight = screenHeight * 0.17;
 
     return SizedBox(
       width: screenWidth,

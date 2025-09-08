@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -35,28 +36,21 @@ class _TecladoPinWidgetState extends State<TecladoPinWidget> {
   }
 
   void _confirmarPin() {
-    if (_pin.isNotEmpty) {
-      widget.onPinComplete(_pin);
-    }
+    if (_pin.isNotEmpty) widget.onPinComplete(_pin);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double keySize = screenWidth / 5;
+    final mq = MediaQuery.of(context);
+    final isTablet = mq.size.shortestSide >= 600; // umbral estándar tablet
+    final spacing = isTablet ? 18.0 : 14.0;
 
-    final List<String> teclas = [
-      '1', '2', '3',
-      '4', '5', '6',
-      '7', '8', '9',
-      'X', '0', 'V',
-    ];
+    final teclas = ['1','2','3','4','5','6','7','8','9','X','0','V'];
 
     return Column(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
-        const SizedBox(height: 10),
+        const SizedBox(height: 4),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -71,29 +65,57 @@ class _TecladoPinWidgetState extends State<TecladoPinWidget> {
             IconButton(
               icon: Icon(
                 _mostrarPin ? Icons.visibility_off : Icons.visibility,
-                color: Colors.white,
+                // no fijamos color para respetar el tema actual
               ),
-              onPressed: () {
-                setState(() => _mostrarPin = !_mostrarPin);
-              },
+              onPressed: () => setState(() => _mostrarPin = !_mostrarPin),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        const Divider(thickness: 1, color: Colors.black),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 18,
-          runSpacing: 18,
-          alignment: WrapAlignment.center,
-          children: teclas.map((valor) {
-            return _buildTecla(
-              valor,
-              size: keySize,
-              esBorrar: valor == 'X',
-              esConfirmar: valor == 'V',
-            );
-          }).toList(),
+        Divider(thickness: 1, color: Theme.of(context).dividerColor),
+        const SizedBox(height: 8),
+
+        // El teclado ocupa SOLO el espacio restante
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, c) {
+              const cols = 3;
+              const rows = 4;
+
+              // Tamaño máximo por ancho y por alto (corregido spacing)
+              final sizeByWidth  = (c.maxWidth  - spacing * (cols - 1)) / cols;
+              final sizeByHeight = (c.maxHeight - spacing * (rows - 1)) / rows;
+
+              // Escogemos el menor y dejamos margen (0.92) para evitar desbordes
+              double keySize = math.min(sizeByWidth, sizeByHeight) * 0.92;
+
+              // (Opcional) acotar tamaños extremos
+              keySize = keySize.clamp(44.0, isTablet ? 120.0 : 96.0);
+
+              final gridWidth  = keySize * cols + spacing * (cols - 1);
+              final gridHeight = keySize * rows + spacing * (rows - 1);
+
+              return Center(
+                child: SizedBox(
+                  width: gridWidth,
+                  height: gridHeight,
+                  child: Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    alignment: WrapAlignment.center,
+                    children: teclas.map((v) {
+                      return _buildTecla(
+                        v,
+                        size: keySize,
+                        esBorrar: v == 'X',
+                        esConfirmar: v == 'V',
+                      );
+                    }).toList(),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ],
     );
@@ -117,7 +139,6 @@ class _TecladoPinWidgetState extends State<TecladoPinWidget> {
     return GestureDetector(
       onTap: () {
         HapticFeedback.mediumImpact();
-
         if (esBorrar) {
           _borrarDigito();
         } else if (esConfirmar) {
@@ -129,7 +150,11 @@ class _TecladoPinWidgetState extends State<TecladoPinWidget> {
       child: SizedBox(
         width: size,
         height: size,
-        child: Image.asset(rutaImagen, fit: BoxFit.contain),
+        child: Image.asset(
+          rutaImagen,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+        ),
       ),
     );
   }

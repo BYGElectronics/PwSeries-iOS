@@ -1,6 +1,9 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pw/src/Controller/idioma_controller.dart';
+
+import '../../widgets/header_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback toggleTheme;
@@ -39,7 +42,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  /// Carga imagen traducida como en control_screen.dart
   String _localizedButton(String name, String code) {
     const folder = "assets/images/Botones";
     switch (code) {
@@ -60,16 +62,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final idioma = Provider.of<IdiomaController>(context).locale.languageCode;
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final double headerHeight = (screenHeight * 0.15).clamp(80.0, 150.0);
-    final double buttonConfigWidthRatio = 1.0;
-    final double buttonConfigHeightRatio = 0.07;
-    final double buttonWidth = screenWidth * buttonConfigWidthRatio;
-    final double buttonHeight = screenHeight * buttonConfigHeightRatio;
-    final double buttonDemoWidth = screenWidth * 0.23;
-    final double buttonDemoHeight = screenHeight * 0.15;
-    final double horizontalPadding = screenWidth * 0.1;
+    final size = MediaQuery.of(context).size;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final screenWidth = size.width;
+    final screenHeight = size.height;
+
+    // Padding lateral razonable
+    final double horizontalPadding = math.max(screenWidth * 0.06, 16);
+
+    // Tamaños máximos del botón (nunca se deforma)
+    final double maxButtonWidth = math.min(
+      screenWidth * 0.80,
+      520,
+    ); // tope absoluto
+    final double maxButtonHeight = math.min(screenHeight * 0.18, 180);
 
     final String rutaConfig = _localizedButton("configInicial", idioma);
 
@@ -77,42 +83,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // Header
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SizedBox(
-              height: headerHeight,
-              child: const DecoratedBox(
-                decoration: BoxDecoration(
-                  image: DecorationImage(
-                    image: AssetImage("assets/images/header/header.png"),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ),
-          ),
+          const Positioned(top: 0, left: 0, right: 0, child: HeaderWidget()),
 
-          // Botón configuración inicial (centrado)
+          // Botón configuración inicial (centrado, HD, sin deformar)
           Center(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
               child: GestureDetector(
-                onTap: () {
-                  Navigator.pushNamed(context, '/configuracionBluetooth');
-                },
-                child: Container(
-                  width: buttonWidth,
-                  height: buttonHeight,
-                  child: Image.asset(
-                    rutaConfig,
-                    fit: BoxFit.fill,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey[300],
-                        child: const Center(child: Text('Error al cargar imagen')),
+                onTap:
+                    () =>
+                        Navigator.pushNamed(context, '/configuracionBluetooth'),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: maxButtonWidth,
+                    maxHeight: maxButtonHeight,
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      final targetWidthPx =
+                          (c.maxWidth * dpr).round(); // para HD
+                      return FittedBox(
+                        fit: BoxFit.contain, // NO deforma
+                        child: Image.asset(
+                          rutaConfig,
+                          // Decodifica a la resolución óptima del dispositivo
+                          cacheWidth: targetWidthPx > 0 ? targetWidthPx : null,
+                          filterQuality: FilterQuality.high,
+                          isAntiAlias: true,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: c.maxWidth,
+                              height: c.maxHeight,
+                              color: Colors.grey[300],
+                              alignment: Alignment.center,
+                              child: const Text('Error al cargar imagen'),
+                            );
+                          },
+                        ),
                       );
                     },
                   ),
@@ -121,17 +128,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
 
-          // Botón demo (esquina inferior derecha)
+          // Botón demo (esquina inferior derecha) — sin cambios
           Positioned(
             bottom: screenHeight * 0.05,
             right: horizontalPadding * 0.5,
             child: GestureDetector(
-              onTap: () {
-                Navigator.pushNamed(context, '/demoConfig');
-              },
+              onTap: () => Navigator.pushNamed(context, '/demoConfig'),
               child: ScaleTransition(
                 scale: _scaleAnimation,
-                child: _buildDemoImage(buttonDemoWidth, buttonDemoHeight),
+                child: _buildDemoImage(screenWidth * 0.23, screenHeight * 0.23),
               ),
             ),
           ),
@@ -142,17 +147,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildDemoImage(double width, double height) {
     return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: width,
-        maxHeight: height,
-      ),
+      constraints: BoxConstraints(maxWidth: width, maxHeight: height),
       child: Image.asset(
         'assets/images/demo/demo.png',
         fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
         errorBuilder: (context, error, stackTrace) {
           return Container(
             color: Colors.grey[300],
-            child: const Center(child: Text('Error al cargar imagen')),
+            alignment: Alignment.center,
+            child: const Text('Error al cargar imagen'),
           );
         },
       ),
